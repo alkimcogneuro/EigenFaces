@@ -1,35 +1,24 @@
-
-% function [] = runsss()  
+ 
 %------------------------------------------------------
-% read a CSV  file of face images, with one face per column.
-% Matlab's readtable() will do this.
-% The first row of the CSV file is the header row, which contains the names of the columns.
-% The first column of the CSV file is the row index, which is not needed.
+% Column indices for the face groups:
+% 2:59 AF faces
+% 60:111 AM faces
+% 112:215 BF faces  
+% 216:308 BM faces
+% 309:401 CF faces
+% still need to identify other groups.
 
-% AllFaces  = readtable('/Users/aakim/ProjectsMatlab/SingularValueDecomposition/EigenFaces/all_images_CFD1142.csv');          % headers become T.Properties.VariableNames
-% headers = AllFaces.Properties.VariableNames;
-% AllFacesMatrix = table2array(AllFaces);                 % numeric matrix, headers stored separately
-
-%-----------------------------------------------------
-% Calculate the average face for the training set of faces, and plot it. 
-%-
-% Matrix trainingFaces is the faces 2-59 (AF faces)
-%%trainingFaces = AllFacesMatrix(:,2:59);        % AF faces
-%trainingFaces = AllFacesMatrix(:,60:111);      % AM faces
-%trainingFaces = AllFacesMatrix(:,112:215);     % BF faces  
-%%trainingFaces = AllFacesMatrix(:, 216:308);   % BM faces
-%trainingFaces = AllFacesMatrix(:, 309:401);     % CF faces
+% Grab the file containing all faces.
+% all_faces_file names a CSV file containing all the face images, with one face per column.
 all_faces_file = '/Users/aakim/ProjectsMatlab/SingularValueDecomposition/EigenFaces/all_images_CFD1142.csv';
-
 startcol = 2;  % first face column to read in (AF faces)
 endcol = 59;  % last face column to read in (AF faces)
-
-trainingFaces = read_face_data(all_faces_file, startcol, endcol)  
+trainingFaces = read_face_data(all_faces_file, startcol, endcol);
 nFaces = size(trainingFaces, 2);  % number of faces in the training set
 
 % Each face image is a column vector of values 1-255, which are the pixel values of the images.
 % The images are 224 x 224, so each column vector has 224*224 = 50176 values.
-% reshape column vector into 224 x 224 matrix
+% to plot a face, reshape column vector into nrows x ncols matrix
 nrows = 224; 
 ncols = 224;
 
@@ -86,57 +75,64 @@ cumVarExplained = cumsum(varExplained);
 % ------------------------------------------------------------------------------------
 %% --- Project faces into eigenface space ---
 % Each column of U is an eigenface, and the columns of U form an orthonormal basis for the space of faces.
+% Each column of U is the coordinates of an eigenface in the original pixel space.
 % Because the columns of U are orthonormal, projecting a centered face
 % onto the eigenface basis is just a matrix multiply by U'. 
 % The rows of U' are the columns of U (the eigenfaces), 
 % so the matrix multiplication will calculate the inner product of each training face (a column of A)
 % with each eigenface (a column of U), 
 % yielding a coordinate that describes how much of that eigenface is present in the training face.
-% Each cell of weights is one of these inner products of a training face with an eigenface.
+% Each cell of face_weights_all is one of these inner products of a training face with an eigenface.
 % 
-% The weights matrix is the coordinates of each face in the eigenface basis.
+% The matrix face_weights_all is the coordinates of each face in the eigenface basis.
 % The columns of the weights matrix correspond to the faces, 
 % and the rows correspond to the eigenfaces, which are ordered by the amount of variance they explain (largest singular value first).
 % 
-% weights(:,i) is the i-th face's coordinates in eigenface space
-weights = U' * A;                       
+
+face_weights_all = U' * A;                       
 % Note of interest:  Equivalently, we could do weights = S * V' 
 % this outs to the same thing as U' * A, given
 % the SVD identity A = U*S*V'), but computing it via U'*A is the most
 % direct/intuitive: "how much does face i overlap with eigenface k".
-% ------------------------------------------------------------------------------------
-% Reconstruct Faces from Eigenface Weights
-% Any mean-centered face can be reconstructed exactly (using ALL components) as: 
-% A(:,i) = U * weights(:,i)
-% And if we want to reconstruct the original, uncentered face, we add the mean face back in:
-% reconstructed_faces(:,i) = meanFace + U*weights(:,i)
 
-%
-% Sanity check: reconstruct face 1 using the full basis and confirm we
-% recover it exactly (up to floating-point round-off).
+
+% ------------------------------------------------------------------------------------
+% Reconstruct one of our faces
+% We'll use the first face in the training set, which is the first column of trainingFaces.
 % ------------------------------------------------------------------------------------
 
-reconTest = meanFace + U * weights(:,1);
-fprintf('Max reconstruction error (face 1, full basis): %g\n', ...
-    max(abs(reconTest - trainingFaces(:,1))));
 
 %% --- Reconstruct a face using only the top dim_reduced components ---
-% Instead of using all the eigenfaces, use only the first few eigenfaces (the most
-% important ones). This approximates the original face using far less
-% information: meanFace + (sum of k weighted eigenfaces), instead of
-% meanFace + (sum of all weighted eigenfaces).
+% Instead of using all the eigenfaces, using varying numbers of eigenfaces
+% reconstruct_face() will multipy the first dim_reduced eigenfaces by the corresponding weights for the target face, 
+% and add the mean face back in.
+% See the function for more information.
+reconstruction_alldims = reconstruct_face(U, A, 'all', 2, meanFace);  % reconstruct the first face using all eigenfaces
 dim_reduced = 3;
-faceIdx = 1;   % which face (column) to demonstrate reconstruction on
-reconK = meanFace + U(:,1:dim_reduced) * weights(1:dim_reduced, faceIdx);
- 
+reconstruction_3dim = reconstruct_face(U, A, dim_reduced, 2, meanFace); % reconstruct the first face using only the top dim_reduced eigenfaces
+dim_reduced = 15;
+reconstruction_15dim = reconstruct_face(U, A, dim_reduced, 2, meanFace); % reconstruct the first face using only the top dim_reduced eigenfaces
+dim_reduced = 25;
+reconstruction_25dim = reconstruct_face(U, A, dim_reduced, 2, meanFace); % reconstruct the first face using only the top dim_reduced eigenfaces
 
+% Check the error for the full reconstruction
+error = max(abs(reconstruction_alldims  - sample_face));
+fprintf('Max reconstruction error (face 1, full basis): %g\n', error);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Visualize Results.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Plot one of our faces, reconstructed from various numbers of eigenfaces.
+% Right now, i'm using all, 3 , 15, and 25 eigenfaces
+figure; 
+tiledlayout(1,4);
+nexttile; imagesc(reshape(reconstruction_alldims, nrows, ncols)), colormap gray; title('Reconstructed from all Eigenfaces');
+nexttile; imagesc(reshape(reconstruction_3dim, nrows, ncols)), colormap gray; title('Reconstructed from Top 3 Eigenfaces');
+nexttile; imagesc(reshape(reconstruction_15dim, nrows, ncols)), colormap gray; title('Reconstructed from Top 15 Eigenfaces');
+nexttile; imagesc(reshape(reconstruction_25dim, nrows, ncols)), colormap gray; title('Reconstructed from Top 25 Eigenfaces');
 
 % Plot the average face.
-figure, axes('position',[0  0  1  1]), axis off
+figure, %%axes('position',[0  0  1  1]), axis off
 imagesc(reshape(meanFace, nrows, ncols)), colormap gray; title('The Average Face');
 
 % Plot the top eigenfaces: reshape each of the first nShow columns of U back
@@ -174,24 +170,38 @@ plot(cumVarExplained, 'o-');
 xlabel('Number of components'); ylabel('Cumulative variance explained');
 title('Cumulative variance');
 
+% The function project_faces2space will project the training faces into 3D eigenface space and plot them.
+num_dims = 3;
+project_faces2space(face_weights_all, varExplained);  
 
-%{
- % Project training faces into 3D eigenface space
-figure('Name', '3D Eigenfaces Space');
-dim_reduced = 3;
+% ---------------------------------------------------------------------------------------
+% Let's think about how to quantify the spread of the faces within the eigenface space 
+% Calculate spread of faces in 3D eigenface space
+% ---------------------------------------------------------------------------------------
+num_dims = 3;
+coords_3d = face_weights_all(1:num_dims, :);
 
-% Extract first 3 principal components for each face
-coords_3d = weights(1:dim_reduced, :);
+% Covariance matrix of the 3D coordinates
+cov_3d = cov(coords_3d');
 
-% Create 3D scatter plot
-scatter3(coords_3d(1,:), coords_3d(2,:), coords_3d(3,:), 50, 'filled');
-xlabel(sprintf('PC 1 (%.1f%%)', 100*varExplained(1)));
-ylabel(sprintf('PC 2 (%.1f%%)', 100*varExplained(2)));
-zlabel(sprintf('PC 3 (%.1f%%)', 100*varExplained(3)));
-title('Training Faces in 3D Eigenfaces Space');
-grid on; 
-%}
+% Standard deviation along each principal component
+std_pc1 = sqrt(cov_3d(1,1));
+std_pc2 = sqrt(cov_3d(2,2));
+std_pc3 = sqrt(cov_3d(3,3));
 
+% Total spread (Frobenius norm of covariance)
+% I don't know that we need/want to use the Frobenius norm here, 
+% but it is a measure of the overall spread of the data in 3D space.
+total_spread = norm(cov_3d, 'fro');
 
-% filepath: /Users/aakim/ProjectsMatlab/SingularValueDecomposition/EigenFaces/dev/Eigenfaces_RaceEffects.m
+% Distance from origin for each face
+distances = vecnorm(coords_3d, 2, 1);
+mean_distance = mean(distances);
+std_distance = std(distances);
 
+fprintf('Spread along PC 1: %.4f\n', std_pc1);
+fprintf('Spread along PC 2: %.4f\n', std_pc2);
+fprintf('Spread along PC 3: %.4f\n', std_pc3);
+fprintf('Total spread (Frobenius norm): %.4f\n', total_spread);
+fprintf('Mean distance from origin: %.4f\n', mean_distance);
+fprintf('Std of distances from origin: %.4f\n', std_distance);
