@@ -11,16 +11,22 @@
 % Grab the file containing all faces.
 % all_faces_file names a CSV file containing all the face images, with one face per column.
 all_faces_file = '/Users/aakim/ProjectsMatlab/SingularValueDecomposition/EigenFaces/all_images_CFD1142.csv';
-startcol = 2;  % first face column to read in (AF faces)
-endcol = 59;  % last face column to read in (AF faces)
+startcol = 2;  % first face column to read in
+endcol = 59;  % last face column to read in
 trainingFaces = read_face_data(all_faces_file, startcol, endcol);
-nFaces = size(trainingFaces, 2);  % number of faces in the training set
 
+% read_face_data returns a matrix with just the specified subset of faces, with each face as a column vector.
+% I think I want to return all the faces and then pick specic columns for the different groups, but for now, just read in the first 58 faces (AF faces).
+
+
+nFaces = size(trainingFaces, 2);  % number of faces in the training set
 % Each face image is a column vector of values 1-255, which are the pixel values of the images.
 % The images are 224 x 224, so each column vector has 224*224 = 50176 values.
-% to plot a face, reshape column vector into nrows x ncols matrix
-nrows = 224; 
-ncols = 224;
+% to plot a face, reshape column vector into num_rows_face x num_cols_face matrix
+num_rows_face = 224; 
+num_cols_face = 224;
+
+plot_all_faces(trainingFaces, num_rows_face, num_cols_face);  % plot all training faces in a grid layout
 
 %% --- Step 1: Mean-center the data ---
 % PCA looks for directions of maximum variance, so we must first
@@ -34,7 +40,7 @@ ncols = 224;
 % with each column equal to meanFace.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Create the average face. 
-meanFace = mean(trainingFaces,2);  % size (nrows * ncols) by 1;
+meanFace = mean(trainingFaces,2);  % size (num_rows_face * num_cols_face) by 1;
 A = trainingFaces - meanFace;  % subtract the average face from each training face.  A is the mean-centered training data matrix.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -107,16 +113,17 @@ face_weights_all = U' * A;
 % reconstruct_face() will multipy the first dim_reduced eigenfaces by the corresponding weights for the target face, 
 % and add the mean face back in.
 % See the function for more information.
-reconstruction_alldims = reconstruct_face(U, A, 'all', 2, meanFace);  % reconstruct the first face using all eigenfaces
+face_idx = 2;
+reconstruction_alldims = reconstruct_face(U, A, 'all', face_idx, meanFace);  % reconstruct the first face using all eigenfaces
 dim_reduced = 3;
-reconstruction_3dim = reconstruct_face(U, A, dim_reduced, 2, meanFace); % reconstruct the first face using only the top dim_reduced eigenfaces
+reconstruction_3dim = reconstruct_face(U, A, dim_reduced, face_idx, meanFace); % reconstruct the first face using only the top dim_reduced eigenfaces
 dim_reduced = 15;
-reconstruction_15dim = reconstruct_face(U, A, dim_reduced, 2, meanFace); % reconstruct the first face using only the top dim_reduced eigenfaces
+reconstruction_15dim = reconstruct_face(U, A, dim_reduced, face_idx, meanFace); % reconstruct the first face using only the top dim_reduced eigenfaces
 dim_reduced = 25;
-reconstruction_25dim = reconstruct_face(U, A, dim_reduced, 2, meanFace); % reconstruct the first face using only the top dim_reduced eigenfaces
+reconstruction_25dim = reconstruct_face(U, A, dim_reduced, face_idx, meanFace); % reconstruct the first face using only the top dim_reduced eigenfaces
 
 % Check the error for the full reconstruction
-error = max(abs(reconstruction_alldims  - sample_face));
+error = max(abs(reconstruction_alldims  - A(:,2)));  % max absolute error between the original and reconstructed face
 fprintf('Max reconstruction error (face 1, full basis): %g\n', error);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -126,14 +133,14 @@ fprintf('Max reconstruction error (face 1, full basis): %g\n', error);
 % Right now, i'm using all, 3 , 15, and 25 eigenfaces
 figure; 
 tiledlayout(1,4);
-nexttile; imagesc(reshape(reconstruction_alldims, nrows, ncols)), colormap gray; title('Reconstructed from all Eigenfaces');
-nexttile; imagesc(reshape(reconstruction_3dim, nrows, ncols)), colormap gray; title('Reconstructed from Top 3 Eigenfaces');
-nexttile; imagesc(reshape(reconstruction_15dim, nrows, ncols)), colormap gray; title('Reconstructed from Top 15 Eigenfaces');
-nexttile; imagesc(reshape(reconstruction_25dim, nrows, ncols)), colormap gray; title('Reconstructed from Top 25 Eigenfaces');
+nexttile; imagesc(reshape(reconstruction_alldims, num_rows_face, num_cols_face)), colormap gray; title('Reconstructed from all Eigenfaces');
+nexttile; imagesc(reshape(reconstruction_3dim, num_rows_face, num_cols_face)), colormap gray; title('Reconstructed from Top 3 Eigenfaces');
+nexttile; imagesc(reshape(reconstruction_15dim, num_rows_face, num_cols_face)), colormap gray; title('Reconstructed from Top 15 Eigenfaces');
+nexttile; imagesc(reshape(reconstruction_25dim, num_rows_face, num_cols_face)), colormap gray; title('Reconstructed from Top 25 Eigenfaces');
 
 % Plot the average face.
-figure, %%axes('position',[0  0  1  1]), axis off
-imagesc(reshape(meanFace, nrows, ncols)), colormap gray; title('The Average Face');
+figure; 
+imagesc(reshape(meanFace, num_rows_face, num_cols_face)), colormap gray; title('The Average Face');
 
 % Plot the top eigenfaces: reshape each of the first nShow columns of U back
 % into a 224x224 image. 
@@ -144,16 +151,10 @@ figure('Name', 'Top 32 Eigenfaces');
 nShow = 32;
 for i = 1:nShow
     subplot(4, 8, i);
-    %%figure; imagesc(EigenFaces), colormap gray    
-    imagesc(reshape(U(:,i), nrows, ncols)); axis image off; colormap gray;
-    %%imagesc(reshape(U(:,i), nrows, ncols)); colormap gray;
+    imagesc(reshape(U(:,i), num_rows_face, num_cols_face)); axis image off; colormap gray;
+    %%imagesc(reshape(U(:,i), num_rows_face, num_cols_face)); colormap gray;
     title(sprintf('PC %d (%.1f%%)', i, 100*varExplained(i)));
 end
-
-
-% project the a new face onto the first five eigenfaces and reconstruct it using only those five eigenfaces.
-%%newFace = AllFacesMatrix(:, 60);  % pick a face from the training set (AF face)
-
 
 % Scree plot / cumulative variance: shows how quickly adding more
 % components captures the total variance in the dataset. A steep drop

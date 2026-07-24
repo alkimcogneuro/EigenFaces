@@ -1,4 +1,4 @@
-function [targetFaces] = read_face_data(filename, startcol, endcol)  
+a
     % grab a subset of faces based on the specified start and end columns
     % the CSV file is assumed to have a header row, which will be ignored.
     % the CSV file contains many different faces, 
